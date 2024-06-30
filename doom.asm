@@ -3,7 +3,7 @@
         ;
         ; by Oscar Toledo G.
         ;
-        ; Dan O'Malley - Removed color enemies to make it more of an exploration demo.        
+        ; Dan O'Malley - Removed color and enemies to make it more of an exploration demo.        
 
 
 EMPTY:  equ 0x00        ; Code for empty space

@@ -3,36 +3,16 @@
         ;
         ; by Oscar Toledo G.
         ;
-        ; Creation date: Nov/21/2019.
-        ; Revision date: Nov/22/2019. Now working.
-        ; Revision date: Nov/23/2019. Optimized.
-        ; Revision date: Nov/24/2019. Builds a world. Added evil cubes, and
-        ;                             can shoot them. 517 bytes.
-        ; Revision date: Nov/25/2019. Optimized last bytes. 509 bytes.
-        ; Revision date: Nov/26/2019. Smaller extract. 508 bytes
-        ;                             (Peter Ferrie).
-        ;
+        ; Dan O'Malley - Removed color enemies to make it more of an exploration demo.        
 
-        ;
-        ; Tricks used:
-        ; o "Slow" ray-casting so doesn't matter if hits horizontal or
-        ;   vertical wall.
-        ;
-
-        cpu 8086
 
 EMPTY:  equ 0x00        ; Code for empty space
 WALL:   equ 0x80        ; Code for wall
-ENEMY:  equ 0xc0        ; Code for enemy, includes shot count
 
-    %ifdef com_file
-        org 0x0100
-    %else
+
         org 0x7c00
-    %endif
 
-down:   equ 0x000b      ; Enemies down
-shot:   equ 0x000a      ; Shot made
+
 rnd:    equ 0x0008      ; Random number
 px:     equ 0x0006      ; Current X position (4.12)
 py:     equ 0x0004      ; Current Y position (4.12)
@@ -53,7 +33,7 @@ start:
 restart:
         cld
         xor cx,cx
-        push cx         ; shot+down
+        push cx         ; shot
         in ax,0x40
         push ax         ; rnd
         mov ah,0x18     ; Start point at maze
@@ -77,84 +57,29 @@ restart:
         inc bx          ; Next square
         jne .0          ; If BX is zero, maze completed
         
-        mov cl,12       ; 12 walls and enemies
-        mov [bp+down],cl        ; Take note of enemies down
+        mov cl,12       ; 12 walls
         mov di,maze+34  ; Point to center of maze
         mov dl,12       ; Modulo 12 for random number
 .2:
         call random
         mov byte [di+bx],WALL   ; Setup a wall
-        call random
-        mov byte [di+bx],ENEMY  ; Setup an enemy
-        add di,byte 16  ; Go to next row of maze
+        add di,16       ; Go to next row of maze
         loop .2         ; Repeat until filled
 game_loop:
         call wait_frame ; Wait a frame
 
         and dl,31       ; 32 frames have passed?
-        jnz .16         ; No, jump
-        ;
-        ; Move cubes
-        ;
-        call get_dir    ; Get player position, also SI=0
-        call get_pos    ; Convert position to maze address
-        mov cx,bx       ; Save into CX
+        jnz draw3d         ; No, jump
 
-        mov bl,0        ; BH already ready, start at corner
 
-.17:    cmp byte [bx],ENEMY
-        jb .18
-        cmp bx,cx       ; Cube over player?
-        jne .25         ; No, jump
-        ;
-        ; Handle death
-        ;
-.22:
-        mov byte [si],0x0c      ; Blood pixel
-        add si,byte 23  ; Advance by prime number
-.23:
-        je restart      ; Zero = full loop, restart game.
-        jnb .22         ; Carry = one fill complete.
-        push si
-        call wait_frame ; Wait a frame (for fast machines)
-        pop si
-        jmp .22         ; Continue
-
-.25:
-        mov di,bx
-        mov al,bl
-        mov ah,cl
-        mov dx,0x0f0f   ; Extract columns
-        and dx,ax
-        xor ax,dx       ; Extract rows
-        cmp ah,al       ; Same row?
-        je .19          ; Yes, jump
-        lea di,[bx+0x10]        ; Cube moves down
-        jnb .19
-        lea di,[bx-0x10]        ; Cube moves up
-.19:    cmp dh,dl       ; Same column?
-        je .20          ; Yes, jump
-        dec di          ; Cube goes left
-        jb .20
-        inc di          ; Cube goes right
-        inc di
-.20:    cmp byte [di],0 ; Can move?
-        jne .18         ; No, jump.
-        mov al,[bx]     ; Take cube
-        mov byte [bx],0 ; Erase origin
-        stosb           ; Put into new place
-.18:
-        inc bx          ; Continue searching the maze...
-        jne .17         ; ...until the end
-
-.16:
+draw3d:
 
         ;
         ; Draw 3D view
         ;
         mov di,39       ; Column number is 39
 .2:
-        lea ax,[di-20]  ; Almost 60 degrees to the left
+        lea ax,[di-20]  ; Almost 60 degrees to left
         add ax,[bp+pa]  ; Get vision angle
         call get_dir    ; Get position and direction
 .3:
@@ -164,21 +89,7 @@ game_loop:
 .4:
         mov cx,0x1204   ; Add grayscale color set...
                         ; ...also load CL with 4. (division by 16)
-        jz .24          ; Jump if normal wall
-        mov ch,32       ; Rainbow
 
-        cmp di,byte 20
-        jne .24         ; Jump if not at center
-        cmp byte [bp+shot],1
-        je .24          ; Jump if not shooting
-        call get_pos
-        inc byte [bx]   ; Increase cube hits
-        cmp byte [bx],ENEMY+3   ; 3 hits?
-        jne .24         ; No, jump
-        mov byte [bx],0 ; Yes, remove.
-        dec byte [bp+down]      ; One cube less
-        je .23          ; Zero means to get another level
-.24:
         lea ax,[di+12]  ; Get cos(-30) to cos(30)
         call get_sin    ; Get cos (8 bit fraction)
         mul si          ; Correct wall distance to...
@@ -209,12 +120,12 @@ game_loop:
         push ax
         push si
         xchg ax,cx
-        mov al,[bp+shot]        ; Ceiling color
+        mov al, 0x07      ; Ceil color
         call fill_column
         xchg ax,bx      ; Wall color
         pop cx
         call fill_column
-        mov al,0x03     ; Floor color (a la Wolfenstein)
+        mov al,0x8     ; Floor color (a la Wolfenstein)
         pop cx
         call fill_column
         pop di
@@ -230,7 +141,7 @@ game_loop:
         dec bx          ; Decrease angle
         dec bx
 .8:
-        test al,0x08    ; Left Alt pressed?
+        test al,0x08    ; Left Alt pressed? was 0x08
         je .9
         inc bx          ; Increase angle
         inc bx
@@ -240,9 +151,9 @@ game_loop:
         je .11
         test bh,0x01    ; But not before?
         jne .11
-        mov ah,7        ; Indicate shot
 
-.11:    mov [bp+shot],ah
+
+.11:    
         mov bh,al
         mov [bp+pa],bx  ; Update angle
 
@@ -252,7 +163,7 @@ game_loop:
         call get_dir    ; Get position and direction
 .5:     call read_maze  ; Move and check for wall hit
         jc .10          ; Hit, jump without updating position.
-        cmp si,byte 4   ; Four times (the speed)
+        cmp si,4        ; Four times (the speed)
         jne .5
 
         mov [bp+px],dx  ; Update X position
@@ -370,9 +281,7 @@ sin_table:
 	db 0xb5,0xbb,0xc4,0xcc,0xd4,0xdb,0xe0,0xe6
         db 0xec,0xf1,0xf5,0xf7,0xfa,0xfd,0xff,0xff
 
-    %ifdef com_file
-    %else
+
 	times 510-($-$$) db 0x4f
 	db 0x55,0xaa           ; Make it a bootable sector
-    %endif
 
